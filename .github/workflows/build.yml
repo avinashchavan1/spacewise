@@ -47,3 +47,27 @@ jobs:
           name: xcodebuild-log
           path: xcodebuild.log
           if-no-files-found: ignore
+
+  screenshots:
+    runs-on: macos-15
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Debug app without sandbox
+        run: |
+          set -o pipefail
+          xcodebuild -project Spacewise.xcodeproj -scheme Spacewise -configuration Debug \
+            -destination 'generic/platform=macOS' -derivedDataPath build \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGN_ENTITLEMENTS= \
+            build | tail -3
+
+      - name: Launch app and capture every screen
+        run: scripts/screenshots.sh build/Build/Products/Debug/Spacewise.app screenshots
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots

@@ -9,6 +9,9 @@ struct SpacewiseApp: App {
             ContentView()
                 .environment(model)
                 .frame(minWidth: 860, minHeight: 540)
+                #if DEBUG
+                .task { DemoLaunch.run(model) }
+                #endif
         }
         .defaultSize(width: 1180, height: 760)
         .commands {

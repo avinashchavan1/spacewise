@@ -88,6 +88,13 @@ struct OrganizeView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
         }
+        #if DEBUG
+        .onAppear {
+            if folder == nil, let demo = UserDefaults.standard.string(forKey: DemoLaunch.organizeKey) {
+                folder = URL(fileURLWithPath: demo, isDirectory: true)
+            }
+        }
+        #endif
         .task(id: PlanKey(folder: folder, strategy: strategy)) {
             reloadPlan()
         }

@@ -9,6 +9,11 @@ enum FileAccess {
     /// The user's actual home folder. Inside the sandbox `NSHomeDirectory()`
     /// points at the app container instead.
     static let realHomePath: String = {
+        #if DEBUG
+        if let demoHome = UserDefaults.standard.string(forKey: "SpacewiseHome") {
+            return demoHome
+        }
+        #endif
         if let entry = getpwuid(getuid()), let directory = entry.pointee.pw_dir {
             return String(cString: directory)
         }
