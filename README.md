@@ -47,6 +47,10 @@ If you distribute outside the App Store instead (notarized download), you can re
 
 ### Before publishing
 
+Listing text, keywords, privacy answers and review notes are ready in `AppStore/listing.md`. A privacy policy page is in `docs/privacy.html`; publish it (for example with GitHub Pages from the `docs` folder) and use its URL.
+
+Every push builds the app on a GitHub Mac runner; the built app is attached to the run as **Spacewise-macOS**. That build is not signed with your certificate, so after downloading, right-click Spacewise.app and choose Open the first time.
+
 - Set your bundle identifier, Team, version and copyright (target → *General* / *Build Settings*).
 - Replace the placeholder app icon in `Spacewise/Assets.xcassets/AppIcon.appiconset` if you want your own.
 - Test a full scan of Macintosh HD on a real Mac, including with Full Disk Access turned on and off.

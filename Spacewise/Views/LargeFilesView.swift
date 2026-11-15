@@ -120,15 +120,13 @@ struct FileTable: View {
 
     var body: some View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
-            TableColumn("") { row in
-                CollectToggle(model: model, node: row.node)
-            }
-            .width(22)
-
             TableColumn("Name", value: \.name) { row in
-                FileNameCell(node: row.node)
+                HStack(spacing: 6) {
+                    CollectToggle(model: model, node: row.node)
+                    FileNameCell(node: row.node)
+                }
             }
-            .width(min: 160, ideal: 280)
+            .width(min: 180, ideal: 300)
 
             TableColumn("Size", value: \.size) { row in
                 Text(formatBytes(row.size))
