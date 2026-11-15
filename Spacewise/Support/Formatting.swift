@@ -30,10 +30,7 @@ extension FSNode {
     var modifiedDate: Date { Date(timeIntervalSince1970: TimeInterval(modified)) }
 
     var category: FileCategory? {
-        if isDirectory {
-            return isPackage ? FileCategory.category(forPackageExtension: fileExtension) : nil
-        }
-        return FileCategory.category(forExtension: fileExtension)
+        FileCategory.category(of: self)
     }
 
     /// Folder that contains this item, abbreviated for display.

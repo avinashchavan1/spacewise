@@ -51,6 +51,59 @@ enum FileCategory: Int, CaseIterable, Hashable, Sendable {
         "migratedphotolibrary", "screenflow", "sketch", "download",
     ]
 
+    /// Where an item sits, which matters for files without a useful extension:
+    /// most cache and app-support data on a Mac has none.
+    enum Location: UInt8, Sendable {
+        case normal
+        /// Inside ~/Library or a hidden folder: unknown files count as system data.
+        case library
+        /// Inside a cache, log or build-data folder: everything counts as system data.
+        case cache
+    }
+
+    private static let cacheFolderNames: Set<String> = [
+        "Caches", "Logs", "DerivedData", "CoreSimulator", "ModuleCache.noindex", "_cacache", ".cache",
+    ]
+
+    /// Location of the contents of a folder called `name` inside a folder at `parent`.
+    static func location(insideFolderNamed name: String, parent: Location) -> Location {
+        if parent == .cache { return .cache }
+        if cacheFolderNames.contains(name) || name.hasSuffix(" DeviceSupport") { return .cache }
+        if name == "Library" || (name.hasPrefix(".") && name != ".Trash") { return .library }
+        return parent
+    }
+
+    /// Location of the contents of `folder`, derived from its ancestors.
+    static func location(inside folder: FSNode?) -> Location {
+        guard let folder else { return .normal }
+        var location = Location.normal
+        for node in folder.ancestorsFromRoot {
+            let name = node.parent == nil ? (node.name as NSString).lastPathComponent : node.name
+            location = self.location(insideFolderNamed: name, parent: location)
+        }
+        return location
+    }
+
+    static func category(forFileExtension ext: String, in location: Location) -> FileCategory {
+        if location == .cache { return .system }
+        let category = category(forExtension: ext)
+        if category == .other && location == .library { return .system }
+        return category
+    }
+
+    static func category(forPackageExtension ext: String, in location: Location) -> FileCategory {
+        location == .cache ? .system : category(forPackageExtension: ext)
+    }
+
+    /// Category of a file or package, or nil for a plain folder.
+    static func category(of node: FSNode) -> FileCategory? {
+        guard !node.isDirectory || node.isPackage else { return nil }
+        let location = location(inside: node.parent)
+        return node.isDirectory
+            ? category(forPackageExtension: node.fileExtension, in: location)
+            : category(forFileExtension: node.fileExtension, in: location)
+    }
+
     static func isPackage(directoryExtension ext: String) -> Bool {
         packageExtensions.contains(ext)
     }

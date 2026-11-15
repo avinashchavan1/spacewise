@@ -15,6 +15,7 @@ enum DemoLaunch {
     static let collectSafeKey = "SpacewiseCollectSafe"
     static let windowSizeKey = "SpacewiseWindowSize"
     static let focusKey = "SpacewiseFocus"
+    static let appearanceKey = "SpacewiseAppearance"
 
     private static var didRun = false
 
@@ -22,6 +23,10 @@ enum DemoLaunch {
         guard !didRun else { return }
         didRun = true
         let defaults = UserDefaults.standard
+
+        if let appearance = defaults.string(forKey: appearanceKey) {
+            NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+        }
 
         if let size = defaults.string(forKey: windowSizeKey) {
             let parts = size.split(separator: "x").compactMap { Double($0) }

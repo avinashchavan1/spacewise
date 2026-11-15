@@ -34,8 +34,8 @@ shoot 06-file-types    10 -SpacewiseScan "$DEMO" -SpacewiseTab fileTypes || fail
 shoot 07-cleanup       10 -SpacewiseScan "$DEMO" -SpacewiseTab cleanup -SpacewiseCollectSafe YES || fail=1
 shoot 08-duplicates    16 -SpacewiseScan "$DEMO" -SpacewiseTab duplicates || fail=1
 shoot 09-organize      8  -SpacewiseTab organize -SpacewiseOrganize "$DEMO/Downloads" || fail=1
-shoot 10-explore-dark  10 -SpacewiseScan "$DEMO" -SpacewiseTab explore -AppleInterfaceStyle Dark || fail=1
-shoot 11-cleanup-dark  10 -SpacewiseScan "$DEMO" -SpacewiseTab cleanup -AppleInterfaceStyle Dark || fail=1
+shoot 10-explore-dark  10 -SpacewiseScan "$DEMO" -SpacewiseTab explore -SpacewiseAppearance dark || fail=1
+shoot 11-cleanup-dark  10 -SpacewiseScan "$DEMO" -SpacewiseTab cleanup -SpacewiseAppearance dark || fail=1
 pkill -x Spacewise 2>/dev/null
 ls -la "$OUT"
 exit $fail

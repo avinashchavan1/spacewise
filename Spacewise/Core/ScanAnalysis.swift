@@ -18,28 +18,12 @@ struct ScanAnalysis: @unchecked Sendable {
         var overall = TopK(limit: largestLimit)
         var perCategory: [FileCategory: TopK] = [:]
 
-        func record(_ node: FSNode, category: FileCategory, files: Int) {
+        forEachCountable(in: root) { node, category, files in
             totals[category, default: CategoryTotal()].bytes += node.size
             totals[category, default: CategoryTotal()].files += files
             guard node.size > 0 else { return }
             overall.insert(node)
             perCategory[category, default: TopK(limit: perCategoryLimit)].insert(node)
-        }
-
-        root.walk { node in
-            switch node.kind {
-            case .directory:
-                if node.isPackage && node !== root {
-                    record(node, category: .category(forPackageExtension: node.fileExtension), files: Int(node.fileCount))
-                    return false
-                }
-                return true
-            case .file:
-                record(node, category: .category(forExtension: node.fileExtension), files: 1)
-                return false
-            case .symlink, .other:
-                return false
-            }
         }
 
         var analysis = ScanAnalysis()
@@ -57,34 +41,42 @@ struct ScanAnalysis: @unchecked Sendable {
         }
     }
 
-    /// Recomputes category totals after files were removed from the tree.
+    /// Updates category totals for a node that is about to leave the tree.
     mutating func subtract(_ node: FSNode) {
-        func subtractOne(_ item: FSNode, category: FileCategory, files: Int) {
-            guard var total = totals(for: category) else { return }
+        var totals = categoryTotals
+        ScanAnalysis.forEachCountable(in: node) { item, category, files in
+            guard var total = totals[category] else { return }
             total.bytes = max(0, total.bytes - item.size)
             total.files = max(0, total.files - files)
-            categoryTotals[category] = total
+            totals[category] = total
         }
-        node.walk { item in
-            switch item.kind {
+        categoryTotals = totals
+    }
+
+    /// Calls `body` for every file and package in `start` (including `start`
+    /// itself), with its category. Package contents are not visited.
+    private static func forEachCountable(in start: FSNode, _ body: (FSNode, FileCategory, Int) -> Void) {
+        var stack: [(node: FSNode, location: FileCategory.Location)] = [(start, FileCategory.location(inside: start.parent))]
+        while let (node, location) = stack.popLast() {
+            switch node.kind {
             case .directory:
-                if item.isPackage {
-                    subtractOne(item, category: .category(forPackageExtension: item.fileExtension), files: Int(item.fileCount))
-                    return false
+                if node.isPackage && node.parent != nil {
+                    body(node, .category(forPackageExtension: node.fileExtension, in: location), Int(node.fileCount))
+                } else {
+                    let name = node.parent == nil ? (node.name as NSString).lastPathComponent : node.name
+                    let inner = FileCategory.location(insideFolderNamed: name, parent: location)
+                    for child in node.children {
+                        stack.append((child, inner))
+                    }
                 }
-                return true
             case .file:
-                subtractOne(item, category: .category(forExtension: item.fileExtension), files: 1)
-                return false
+                body(node, .category(forFileExtension: node.fileExtension, in: location), 1)
             case .symlink, .other:
-                return false
+                break
             }
         }
     }
 
-    private func totals(for category: FileCategory) -> CategoryTotal? {
-        categoryTotals[category]
-    }
 }
 
 /// Keeps the `limit` largest nodes seen, using a min-heap.

@@ -119,11 +119,13 @@ enum Treemap {
     /// while the tiles stay large enough to read.
     static func layout(root: FSNode, in rect: TreemapRect, options: TreemapOptions = TreemapOptions()) -> [TreemapTile] {
         var tiles: [TreemapTile] = []
-        layoutChildren(of: root, in: rect, depth: 0, options: options, into: &tiles)
+        layoutChildren(of: root, in: rect, depth: 0, location: FileCategory.location(inside: root),
+                       options: options, into: &tiles)
         return tiles
     }
 
     private static func layoutChildren(of node: FSNode, in rect: TreemapRect, depth: Int,
+                                       location: FileCategory.Location,
                                        options: TreemapOptions, into tiles: inout [TreemapTile]) {
         guard node.size > 0, rect.width >= options.minSide, rect.height >= options.minSide else { return }
         let scale = rect.area / Double(node.size)
@@ -155,18 +157,21 @@ enum Treemap {
                     && childRect.width >= options.minHeaderWidth && childRect.height >= options.headerHeight * 3
                 tiles.append(TreemapTile(node: child, rect: childRect, depth: depth, isLeaf: false,
                                          category: nil, hasHeader: wantsHeader))
-                var inner = childRect.insetBy(options.padding)
+                // A folder with a single item adds no information, so it takes
+                // no border; otherwise long chains of folders stack up borders.
+                var inner = child.children.count == 1 && !wantsHeader ? childRect : childRect.insetBy(options.padding)
                 if wantsHeader {
                     inner.y += options.headerHeight
                     inner.height = max(0, inner.height - options.headerHeight)
                 }
-                layoutChildren(of: child, in: inner, depth: depth + 1, options: options, into: &tiles)
+                let inside = FileCategory.location(insideFolderNamed: child.name, parent: location)
+                layoutChildren(of: child, in: inner, depth: depth + 1, location: inside, options: options, into: &tiles)
             } else {
                 let category: FileCategory?
                 if child.isDirectory {
-                    category = child.isPackage ? FileCategory.category(forPackageExtension: child.fileExtension) : nil
+                    category = child.isPackage ? FileCategory.category(forPackageExtension: child.fileExtension, in: location) : nil
                 } else {
-                    category = FileCategory.category(forExtension: child.fileExtension)
+                    category = FileCategory.category(forFileExtension: child.fileExtension, in: location)
                 }
                 tiles.append(TreemapTile(node: child, rect: childRect, depth: depth, isLeaf: true,
                                          category: category, hasHeader: false))

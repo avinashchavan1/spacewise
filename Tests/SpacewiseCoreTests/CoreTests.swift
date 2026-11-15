@@ -203,6 +203,60 @@ final class CoreTests: XCTestCase {
         root.teardown()
     }
 
+    func testCategoriesDependOnLocation() throws {
+        try write("Library/Caches/com.app/blob", bytes: 40_000)            // cache, no extension
+        try write("Library/Caches/com.app/thumb.jpg", bytes: 30_000)       // cache, even with an extension
+        try write("Library/Application Support/App/state", bytes: 20_000)  // library, no extension
+        try write("Library/Application Support/App/photo.png", bytes: 10_000)
+        try write(".npm/_cacache/index", bytes: 15_000)
+        try write("Projects/tool", bytes: 5_000)                           // ordinary folder, no extension
+        try write(".Trash/clip.mov", bytes: 25_000)
+        let root = try scan()
+
+        func category(_ relative: String) throws -> FileCategory? {
+            let node = try XCTUnwrap(root.descendant(atPath: base.path + "/" + relative))
+            return FileCategory.category(of: node)
+        }
+        XCTAssertEqual(try category("Library/Caches/com.app/blob"), .system)
+        XCTAssertEqual(try category("Library/Caches/com.app/thumb.jpg"), .system)
+        XCTAssertEqual(try category("Library/Application Support/App/state"), .system)
+        XCTAssertEqual(try category("Library/Application Support/App/photo.png"), .images)
+        XCTAssertEqual(try category(".npm/_cacache/index"), .system)
+        XCTAssertEqual(try category("Projects/tool"), .other)
+        XCTAssertEqual(try category(".Trash/clip.mov"), .videos)
+        XCTAssertNil(try category("Projects"))
+
+        var analysis = ScanAnalysis.analyze(root: root)
+        XCTAssertEqual(analysis.categoryTotals[.system]?.files, 4)
+        XCTAssertEqual(analysis.categoryTotals[.other]?.files, 1)
+        XCTAssertEqual(analysis.categoryTotals.values.reduce(0) { $0 + $1.bytes }, root.size)
+
+        // Removing a cache folder takes its files out of System, not Other.
+        let caches = try XCTUnwrap(root.descendant(atPath: base.path + "/Library/Caches"))
+        analysis.subtract(caches)
+        caches.removeFromTree()
+        XCTAssertEqual(analysis.categoryTotals[.system]?.files, 2)
+        XCTAssertEqual(analysis.categoryTotals.values.reduce(0) { $0 + $1.bytes }, root.size)
+
+        // The treemap colours blocks the same way.
+        let library = try XCTUnwrap(root.child(named: "Library"))
+        let tiles = Treemap.layout(root: library, in: TreemapRect(x: 0, y: 0, width: 600, height: 400))
+        XCTAssertEqual(tiles.first { $0.node.name == "state" }?.category, .system)
+        XCTAssertEqual(tiles.first { $0.node.name == "photo.png" }?.category, .images)
+        root.teardown()
+    }
+
+    func testSingleItemFoldersDoNotStackBorders() throws {
+        try write("a/b/c/d/deep.bin", bytes: 400_000)
+        try write("other.bin", bytes: 100_000)
+        let root = try scan()
+        let tiles = Treemap.layout(root: root, in: TreemapRect(x: 0, y: 0, width: 800, height: 500))
+        let b = try XCTUnwrap(tiles.first { $0.node.name == "b" })
+        let deep = try XCTUnwrap(tiles.first { $0.node.name == "deep.bin" })
+        XCTAssertEqual(deep.rect, b.rect, "a chain of single-item folders adds no extra insets")
+        root.teardown()
+    }
+
     func testTopKKeepsLargest() {
         var top = TopK(limit: 5)
         var sizes = (1...200).map { Int64(($0 * 7919) % 1000) }

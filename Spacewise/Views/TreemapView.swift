@@ -106,8 +106,12 @@ struct TreemapView: View {
                 context.fill(path, with: .color(color.opacity(opacity)))
                 drawLeafLabel(tile, rect: rect, in: &context)
             } else {
-                let path = Path(roundedRect: rect, cornerRadius: 4)
-                context.fill(path, with: .color(Color.primary.opacity(tile.depth == 0 ? 0.07 : 0.05)))
+                // Only top-level folders get a backdrop; nested ones are shown by
+                // the gaps between their blocks, which keeps deep trees crisp.
+                if tile.depth == 0 {
+                    let path = Path(roundedRect: rect, cornerRadius: 4)
+                    context.fill(path, with: .color(Color.primary.opacity(0.07)))
+                }
                 if tile.hasHeader {
                     var clipped = context
                     clipped.clip(to: Path(CGRect(x: rect.minX + 4, y: rect.minY, width: rect.width - 8, height: 17)))
@@ -126,7 +130,7 @@ struct TreemapView: View {
     }
 
     private func drawLeafLabel(_ tile: TreemapTile, rect: CGRect, in context: inout GraphicsContext) {
-        guard rect.width >= 64, rect.height >= 20 else { return }
+        guard rect.width >= 44, rect.height >= 20 else { return }
         var clipped = context
         clipped.clip(to: Path(rect.insetBy(dx: 4, dy: 2)))
         let name: Text = Text(tile.node.displayName)
