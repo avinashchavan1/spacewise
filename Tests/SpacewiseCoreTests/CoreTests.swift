@@ -147,6 +147,50 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(DiskScanner.normalize("/"), "/")
         XCTAssertTrue(ScanOptions.recommended(forRoot: "/").crossMountPoints)
         XCTAssertFalse(ScanOptions.recommended(forRoot: "/Users/me").crossMountPoints)
+        XCTAssertTrue(ScanOptions.recommended(forRoot: "/Users/me").allowedDevices.isEmpty)
+        #if canImport(Darwin)
+        // On macOS the whole-disk scan enters the system and Data volumes only.
+        let root = ScanOptions.recommended(forRoot: "/")
+        XCTAssertEqual(root.allowedDevices, Set([DiskScanner.deviceID(of: "/"),
+                                                 DiskScanner.deviceID(of: "/System/Volumes/Data")].compactMap { $0 }))
+        // Recent macOS reports one device ID for both volumes of the group.
+        XCTAssertFalse(root.allowedDevices.isEmpty)
+        #endif
+    }
+
+    func testCrossingStopsAtVolumesThatAreNotAllowed() throws {
+        try write("a/one.bin", bytes: 10_000)
+        try write("a/b/two.bin", bytes: 10_000)
+        let device = try XCTUnwrap(DiskScanner.deviceID(of: base.path))
+
+        // Same volume everywhere: nothing is skipped whatever the allow list says.
+        var options = ScanOptions()
+        options.crossMountPoints = true
+        options.allowedDevices = [device &+ 1]
+        let sameVolume = try scan(options)
+        XCTAssertEqual(sameVolume.fileCount, 2)
+        sameVolume.teardown()
+
+        // A volume mounted inside the tree is entered only if it is allowed.
+        // There is no mount here to test with, so check the rule the scanner uses
+        // against /dev (devfs), which is always a different volume from "/".
+        if let devfs = DiskScanner.deviceID(of: "/dev"), let rootDevice = DiskScanner.deviceID(of: "/"), devfs != rootDevice {
+            var limited = ScanOptions()
+            limited.crossMountPoints = true
+            limited.allowedDevices = [rootDevice]
+            limited.excludedPaths = []
+            let tree = try XCTUnwrap(DiskScanner().scan(rootPath: "/", options: {
+                var o = limited
+                // Keep the walk tiny: skip everything but /dev.
+                o.excludedPaths = Set((try? FileManager.default.contentsOfDirectory(atPath: "/"))?
+                    .filter { $0 != "dev" }.map { "/" + $0 } ?? [])
+                return o
+            }()))
+            let dev = try XCTUnwrap(tree.child(named: "dev"))
+            XCTAssertTrue(dev.flags.contains(.skipped))
+            XCTAssertTrue(dev.children.isEmpty)
+            tree.teardown()
+        }
     }
 
     // MARK: Tree edits

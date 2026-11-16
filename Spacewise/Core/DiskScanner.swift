@@ -11,6 +11,9 @@ import Musl
 struct ScanOptions: Sendable {
     /// Descend into directories that live on a different volume than the root.
     var crossMountPoints = false
+    /// When crossing mount points, only these volumes (by device ID) are
+    /// entered. Empty means any volume.
+    var allowedDevices: Set<UInt64> = []
     /// Absolute paths that are listed but never descended into.
     var excludedPaths: Set<String> = []
     /// Number of directories read in parallel.
@@ -18,13 +21,18 @@ struct ScanOptions: Sendable {
 
     /// Options suited to a root path. Scanning "/" on macOS has to cross onto
     /// the Data volume (it is firmlinked into the read-only system volume), so
-    /// crossing is allowed there while other disks and the duplicate view of
-    /// the Data volume are excluded.
+    /// crossing is allowed there, but only onto that volume: disk images and
+    /// other volumes mounted below "/" (Simulator runtimes, cryptexes, device
+    /// file systems) would otherwise be counted on top of the files that hold
+    /// them. Other disks and the duplicate view of the Data volume are excluded.
     static func recommended(forRoot path: String) -> ScanOptions {
         var options = ScanOptions()
-        if path == "/" {
+        if DiskScanner.normalize(path) == "/" {
             options.crossMountPoints = true
             options.excludedPaths = ["/System/Volumes", "/Volumes", "/dev", "/net", "/home", "/proc", "/sys"]
+            if let system = DiskScanner.deviceID(of: "/"), let data = DiskScanner.deviceID(of: "/System/Volumes/Data") {
+                options.allowedDevices = [system, data]
+            }
         }
         return options
     }
@@ -161,7 +169,13 @@ final class DiskScanner: @unchecked Sendable {
                 let childPath = prefix + name
                 let device = UInt64(truncatingIfNeeded: st.st_dev)
                 var descend = true
-                if !options.crossMountPoints && device != work.device { descend = false }
+                if device != work.device {
+                    if !options.crossMountPoints {
+                        descend = false
+                    } else if !options.allowedDevices.isEmpty && !options.allowedDevices.contains(device) {
+                        descend = false
+                    }
+                }
                 if descend && !options.excludedPaths.isEmpty && options.excludedPaths.contains(childPath) { descend = false }
                 if descend && DiskScanner.isDataless(st) { descend = false }
                 if !descend { flags.insert(.skipped) }
@@ -229,6 +243,13 @@ final class DiskScanner: @unchecked Sendable {
         #else
         return false
         #endif
+    }
+
+    /// Device ID of the volume that holds `path`, or nil if it does not exist.
+    static func deviceID(of path: String) -> UInt64? {
+        var st = stat()
+        guard lstat(path, &st) == 0 else { return nil }
+        return UInt64(truncatingIfNeeded: st.st_dev)
     }
 
     static func normalize(_ path: String) -> String {
