@@ -1,0 +1,1 @@
+Your Mac is full. Of what? Spacewise maps every byte as a treemap in seconds, finds exact duplicates by content, and clears caches and old downloads with everything going to the Trash first. Native for macOS, no tracking: github.com/avinashchavan1/spacewise
