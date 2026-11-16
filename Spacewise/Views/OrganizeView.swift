@@ -112,7 +112,7 @@ struct OrganizeView: View {
             }
             .frame(maxHeight: .infinity)
         } else if let loadError {
-            ContentUnavailableView("Couldn’t Read Folder", systemImage: "exclamationmark.triangle",
+            ContentUnavailableView("Can’t Organize This Folder", systemImage: "exclamationmark.triangle",
                                    description: Text(loadError))
                 .frame(maxHeight: .infinity)
         } else if plan.isEmpty {
@@ -174,6 +174,11 @@ struct OrganizeView: View {
             plan = []
             return
         }
+        guard ProtectedLocations.canOrganize(folder.path, homePath: FileAccess.realHomePath) else {
+            plan = []
+            loadError = "Spacewise doesn’t sort “\(abbreviatePath(folder.path))” because macOS or your apps rely on how its files are laid out. Choose Desktop, Downloads, Documents or another folder of your own."
+            return
+        }
         do {
             let entries = try FolderOrganizer.entries(in: folder)
             plan = Organizer.plan(entries: entries, strategy: strategy, calendar: .current)
@@ -184,7 +189,8 @@ struct OrganizeView: View {
     }
 
     private func apply() {
-        guard let folder, !plan.isEmpty else { return }
+        guard let folder, !plan.isEmpty,
+              ProtectedLocations.canOrganize(folder.path, homePath: FileAccess.realHomePath) else { return }
         let moves = plan
         isWorking = true
         Task {

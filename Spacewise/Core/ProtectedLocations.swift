@@ -42,4 +42,38 @@ enum ProtectedLocations {
         }
         return false
     }
+
+    /// Home folders that are meant to be tidied. Movies, Music and Pictures are
+    /// left out because they hold app libraries (Photos, Music, TV).
+    static let organizableHomeFolders: Set<String> = ["Desktop", "Documents", "Downloads"]
+
+    /// Top-level folders whose layout macOS and installed apps rely on.
+    static let systemRoots: Set<String> = [
+        "Applications", "Library", "System", "usr", "bin", "sbin", "opt", "private",
+        "etc", "var", "tmp", "cores", "dev",
+    ]
+
+    /// True when Spacewise may sort the loose files of `path` into subfolders.
+    /// Refuses system folders, /Applications (apps would be moved into a
+    /// subfolder), the home folder itself, anything in ~/Library and anything
+    /// inside a package such as an app.
+    static func canOrganize(_ path: String, homePath: String) -> Bool {
+        let path = DiskScanner.normalize(path)
+        let home = DiskScanner.normalize(homePath)
+        let components = path.split(separator: "/")
+
+        if path.hasPrefix(home + "/") {
+            let inside = path.dropFirst(home.count + 1).split(separator: "/")
+            if inside.count == 1 && organizableHomeFolders.contains(String(inside[0])) { return true }
+            if inside.first == "Library" { return false }
+        }
+        if isProtected(path, homePath: home) { return false }
+        if let first = components.first, systemRoots.contains(String(first)) { return false }
+        for component in components {
+            guard let dot = component.lastIndex(of: "."), dot != component.startIndex else { continue }
+            let ext = component[component.index(after: dot)...].lowercased()
+            if FileCategory.isPackage(directoryExtension: ext) { return false }
+        }
+        return true
+    }
 }

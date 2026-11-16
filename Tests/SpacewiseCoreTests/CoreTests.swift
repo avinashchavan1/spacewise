@@ -445,6 +445,25 @@ final class CoreTests: XCTestCase {
         }
     }
 
+    func testOrganizeOnlyUserFolders() {
+        let home = "/Users/alex"
+        func allowed(_ path: String) -> Bool { ProtectedLocations.canOrganize(path, homePath: home) }
+
+        for path in ["/Users/alex/Downloads", "/Users/alex/Desktop", "/Users/alex/Documents/",
+                     "/Users/alex/Documents/Scans", "/Users/alex/Projects", "/Users/alex/Downloads/old",
+                     "/Volumes/External", "/Volumes/External/Photos"] {
+            XCTAssertTrue(allowed(path), path)
+        }
+        for path in ["/", "/Applications", "/Applications/Utilities", "/Applications/Games", "/System/Library",
+                     "/Library/Fonts", "/usr/local/bin", "/opt/homebrew/bin", "/private/tmp", "/Users",
+                     "/Users/alex", "/Users/alex/Library", "/Users/alex/Library/Preferences",
+                     "/Users/alex/Library/Application Support/App", "/Users/alex/Pictures", "/Users/alex/Music",
+                     "/Users/alex/Movies", "/Users/alex/Downloads/Tool.app/Contents",
+                     "/Users/alex/Pictures/Photos Library.photoslibrary", "/Users/sam", "/Volumes"] {
+            XCTAssertFalse(allowed(path), path)
+        }
+    }
+
     func testDotCacheIsListedPerToolAndKeepsHuggingFaceToken() throws {
         let home = base.appendingPathComponent("Users/alex").path
         try write("Users/alex/.cache/uv/archive/lib.so", bytes: 3 << 20)
