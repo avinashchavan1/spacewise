@@ -147,6 +147,8 @@ enum FileCategory: Int, CaseIterable, Hashable, Sendable {
         add(.documents, "pdf doc docx xls xlsx ppt pptx txt rtf md markdown pages numbers key odt ods odp csv tsv epub mobi azw3 tex djvu xps one eml msg ics vcf")
         add(.archives, "zip rar 7z tar gz tgz bz2 tbz xz txz zst lz lzma cab dmg iso img pkg mpkg xip sit sitx jar war apk ipa deb rpm cpgz vhd vmdk vdi qcow2 toast cdr sparseimage")
         add(.developer, "swift m mm h hpp c cc cpp cxx cs java kt kts scala go rs py pyc pyo rb php js jsx mjs cjs ts tsx vue svelte css scss sass less html htm xml json yaml yml toml ini cfg conf gradle sh bash zsh fish bat ps1 sql sqlite sqlite3 db o a so dylib class dex wasm lock log map patch diff ipynb r lua pl pm dart ex exs erl hs clj nim zig asm s plist storyboard xib xcconfig pbxproj entitlements strings car metallib tbd swiftmodule swiftdoc swiftinterface pch hmap dia")
+        // Machine-learning models and weights, and compiled modules of developer tools.
+        add(.developer, "safetensors gguf ggml onnx pt pth ckpt h5 keras tflite mlmodel npy npz node jmod pcm")
         add(.applications, "app exe msi")
         add(.system, "cache tmp temp bak swp dat bin sys dll kext ds_store localized")
         return map

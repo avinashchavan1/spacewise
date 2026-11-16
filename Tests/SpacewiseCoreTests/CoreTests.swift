@@ -272,6 +272,9 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(FileCategory.category(forExtension: "heic"), .images)
         XCTAssertEqual(FileCategory.category(forExtension: "dmg"), .archives)
         XCTAssertEqual(FileCategory.category(forExtension: "swift"), .developer)
+        for model in ["safetensors", "gguf", "onnx", "pt", "ckpt", "mlmodel"] {
+            XCTAssertEqual(FileCategory.category(forExtension: model), .developer, model)
+        }
         XCTAssertEqual(FileCategory.category(forExtension: "zzz"), .other)
         XCTAssertEqual(FileCategory.category(forPackageExtension: "photoslibrary"), .images)
         XCTAssertTrue(FileCategory.isPackage(directoryExtension: "app"))
