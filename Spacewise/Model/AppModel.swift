@@ -520,10 +520,12 @@ final class AppModel {
         duplicateState = .running
 
         Task {
-            let poll = Task { [weak self] in
+            // The enclosing task already holds self until the search ends, and
+            // this one is cancelled right after, so a weak capture adds nothing.
+            let poll = Task {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .milliseconds(150))
-                    guard let self, self.duplicateFinder === finder else { return }
+                    guard self.duplicateFinder === finder else { return }
                     self.duplicateProgress = finder.progress
                 }
             }
