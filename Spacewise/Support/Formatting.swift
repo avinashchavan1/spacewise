@@ -40,6 +40,8 @@ extension FSNode {
     }
 
     var kindDescription: String {
+        if kind == .symlink { return "Symbolic Link" }
+        if kind == .other { return "Special File" }
         if isDirectory && !isPackage { return "Folder" }
         let ext = fileExtension
         if isPackage && ext == "app" { return "Application" }
