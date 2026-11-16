@@ -418,6 +418,47 @@ final class CoreTests: XCTestCase {
     }
     #endif
 
+    // MARK: Protected locations
+
+    func testProtectedLocations() {
+        let home = "/Users/alex"
+        func protected(_ path: String) -> Bool { ProtectedLocations.isProtected(path, homePath: home) }
+
+        for path in ["/", "/System", "/System/Library/Fonts", "/Users", "/Applications", "/Library", "/opt",
+                     "/usr", "/private/var", "/private/etc", "/opt/homebrew", "/usr/local",
+                     "/Users/alex", "/Users/alex/", "/Users/Shared", "/Users/sam",
+                     "/Users/alex/Library", "/Users/alex/Downloads", "/Users/alex/Documents", "/Users/alex/.Trash",
+                     "/Users/alex/Library/Caches", "/Users/alex/Library/Application Support",
+                     "/Users/alex/Library/Containers", "/Users/alex/Library/Logs"] {
+            XCTAssertTrue(protected(path), path)
+        }
+        for path in ["/Applications/Foo.app", "/opt/homebrew/Cellar/node", "/Library/Caches/com.example",
+                     "/private/var/folders/xy", "/Users/alex/.cache", "/Users/alex/.npm/_cacache",
+                     "/Users/alex/Downloads/movie.mkv", "/Users/alex/Projects", "/Users/alex/Projects/app/node_modules",
+                     "/Users/alex/Library/Caches/com.google.Chrome", "/Users/alex/Library/Logs/Claude",
+                     "/Users/alex/Library/Developer/Xcode/DerivedData", "/Users/alex/.Trash/old.zip",
+                     "/Users/alex/Library/pnpm/store", "/Volumes/External/Movies"] {
+            XCTAssertFalse(protected(path), path)
+        }
+    }
+
+    func testCleanupSuggestionsAvoidProtectedLocations() throws {
+        let home = base.appendingPathComponent("Users/alex").path
+        for relative in ["Library/Caches/com.example.big/data", "Library/Logs/app/log.txt",
+                         ".cache/huggingface/model", ".Trash/old.zip", "Downloads/setup.dmg",
+                         "Projects/web/node_modules/pkg/index.js"] {
+            try write("Users/alex/" + relative, bytes: 2 << 20)
+        }
+        let root = try scan()
+        let suggestions = CleanupRules.suggestions(root: root, options: .init(homePath: home))
+        let items = suggestions.flatMap(\.items)
+        XCTAssertFalse(items.isEmpty)
+        for item in items {
+            XCTAssertFalse(ProtectedLocations.isProtected(item.path, homePath: home), item.path)
+        }
+        root.teardown()
+    }
+
     // MARK: Cleanup rules
 
     func testCleanupSuggestions() throws {

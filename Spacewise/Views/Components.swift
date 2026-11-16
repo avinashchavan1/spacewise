@@ -31,8 +31,8 @@ struct CollectToggle: View {
         ))
         .toggleStyle(.checkbox)
         .labelsHidden()
-        .disabled(node.parent == nil || (!model.isCollected(node) && model.isCoveredByCollection(node)))
-        .help("Add to the cleanup list")
+        .disabled(model.isProtected(node) || (!model.isCollected(node) && model.isCoveredByCollection(node)))
+        .help(model.isProtected(node) ? "Protected: macOS or your account depends on this folder" : "Add to the cleanup list")
     }
 }
 
@@ -76,12 +76,15 @@ struct NodeMenuItems: View {
             }
             Button(nodes.count == 1 ? "Copy Path" : "Copy Paths") { model.copyPath(nodes) }
             Divider()
+            let protected = nodes.contains { model.isProtected($0) }
             if nodes.allSatisfy({ model.isCollected($0) }) {
                 Button("Remove from Cleanup List") { model.uncollect(nodes) }
             } else {
                 Button("Add to Cleanup List") { model.collect(nodes) }
+                    .disabled(protected)
             }
             Button("Move to Trash…", role: .destructive) { model.requestTrash(nodes) }
+                .disabled(protected)
         }
     }
 }

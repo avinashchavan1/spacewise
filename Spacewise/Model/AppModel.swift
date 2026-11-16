@@ -327,9 +327,15 @@ final class AppModel {
         return false
     }
 
+    /// True for folders that must never be removed, such as /System, the
+    /// home folder or ~/Library. Their contents can still be removed.
+    func isProtected(_ node: FSNode) -> Bool {
+        node.parent == nil || ProtectedLocations.isProtected(node.path, homePath: FileAccess.realHomePath)
+    }
+
     func collect(_ nodes: [FSNode]) {
         for node in nodes {
-            guard node.parent != nil, node.isInTree, !isCoveredByCollection(node) else { continue }
+            guard node.parent != nil, node.isInTree, !isProtected(node), !isCoveredByCollection(node) else { continue }
             // A folder replaces anything inside it that was already listed.
             if node.isDirectory {
                 let inside = collected.filter { $0.isDescendant(of: node) }
@@ -390,7 +396,16 @@ final class AppModel {
 
     /// Removes items, asking first unless the user turned confirmation off.
     func requestTrash(_ nodes: [FSNode]) {
-        let targets = nodes.filter { $0.parent != nil && $0.isInTree }
+        let candidates = nodes.filter { $0.parent != nil && $0.isInTree }
+        let targets = candidates.filter { !isProtected($0) }
+        if targets.count < candidates.count {
+            let names = candidates.filter { isProtected($0) }.prefix(6).map { abbreviatePath($0.path) }
+            alert = AlertInfo(title: "Protected Location",
+                              message: "Spacewise doesn’t remove folders that macOS or your account depend on:\n"
+                                + names.joined(separator: "\n")
+                                + "\n\nNothing was moved to the Trash. You can still remove items inside these folders.")
+            return
+        }
         guard !targets.isEmpty else { return }
         let confirm = UserDefaults.standard.object(forKey: SettingsKey.confirmBeforeTrash) as? Bool ?? true
         if confirm {
@@ -403,7 +418,7 @@ final class AppModel {
     /// Moves items to the Trash (or deletes them for good if they are already
     /// in the Trash) and removes them from the scanned tree.
     func moveToTrash(_ nodes: [FSNode]) {
-        let targets = AppModel.withoutNestedItems(nodes.filter { $0.parent != nil && $0.isInTree })
+        let targets = AppModel.withoutNestedItems(nodes.filter { $0.parent != nil && $0.isInTree && !isProtected($0) })
         guard !targets.isEmpty, !isDeleting else { return }
         isDeleting = true
 
