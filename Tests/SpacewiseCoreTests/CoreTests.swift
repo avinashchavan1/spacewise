@@ -445,6 +445,25 @@ final class CoreTests: XCTestCase {
         }
     }
 
+    func testDotCacheIsListedPerToolAndKeepsHuggingFaceToken() throws {
+        let home = base.appendingPathComponent("Users/alex").path
+        try write("Users/alex/.cache/uv/archive/lib.so", bytes: 3 << 20)
+        try write("Users/alex/.cache/huggingface/hub/model.safetensors", bytes: 4 << 20)
+        try write("Users/alex/.cache/huggingface/xet/chunk", bytes: 2 << 20)
+        try write("Users/alex/.cache/huggingface/token", bytes: 40)
+        try write("Users/alex/.cache/huggingface/stored_tokens", bytes: 40)
+        try write("Users/alex/.cache/tiny/file", bytes: 10)
+        try write("Users/alex/.cache/loose-file.bin", bytes: 3 << 20)
+
+        let root = try scan()
+        let suggestions = CleanupRules.suggestions(root: root, options: .init(homePath: home))
+        let packageCaches = try XCTUnwrap(suggestions.first { $0.kind == .packageCaches })
+        let paths = Set(packageCaches.items.map { $0.path.replacingOccurrences(of: home + "/", with: "") })
+        XCTAssertEqual(paths, [".cache/uv", ".cache/huggingface/hub", ".cache/huggingface/xet"])
+        XCTAssertEqual(packageCaches.items.map(\.size), packageCaches.items.map(\.size).sorted(by: >))
+        root.teardown()
+    }
+
     func testCleanupSuggestionsAvoidProtectedLocations() throws {
         let home = base.appendingPathComponent("Users/alex").path
         for relative in ["Library/Caches/com.example.big/data", "Library/Logs/app/log.txt",

@@ -45,6 +45,11 @@ enum CleanupRules {
         var now: Date = Date()
     }
 
+    /// Folders in ~/.cache where only some subfolders are cache data.
+    static let dotCacheKeepOnly: [String: [String]] = [
+        "huggingface": ["hub", "xet"],
+    ]
+
     static func suggestions(root: FSNode, options: Options) -> [CleanupSuggestion] {
         var result: [CleanupSuggestion] = []
         let home = DiskScanner.normalize(options.homePath)
@@ -69,6 +74,22 @@ enum CleanupRules {
                 .compactMap { node($0) }
                 .filter { $0.size >= minimum }
                 .sorted { $0.size > $1.size }
+        }
+
+        /// The folders inside ~/.cache, one item per tool, rather than ~/.cache as
+        /// a whole: some tools keep more than cache data there. Hugging Face keeps
+        /// its login token next to its download cache, so only the cache is offered.
+        func dotCacheFolders() -> [FSNode] {
+            guard let cache = node(".cache") else { return [] }
+            var items: [FSNode] = []
+            for child in cache.children where child.isDirectory {
+                if let keep = dotCacheKeepOnly[child.name] {
+                    items += folders(keep.map { ".cache/\(child.name)/\($0)" })
+                } else if child.size >= minimum {
+                    items.append(child)
+                }
+            }
+            return items
         }
 
         func add(_ kind: CleanupSuggestion.Kind, _ title: String, _ detail: String,
@@ -113,16 +134,16 @@ enum CleanupRules {
 
         add(.packageCaches, "Package Manager Caches",
             "Downloaded packages kept by developer tools. They are fetched again when needed.",
-            .safe, folders([
+            .safe, (folders([
                 ".npm/_cacache", ".yarn/cache", ".pnpm-store", "Library/pnpm/store",
                 ".gradle/caches", ".m2/repository", ".cocoapods/repos", ".cargo/registry",
-                ".cache", ".bun/install/cache", ".pub-cache", "go/pkg/mod",
+                ".bun/install/cache", ".pub-cache", "go/pkg/mod",
                 "Library/Caches/Homebrew", "Library/Caches/pip", "Library/Caches/CocoaPods",
                 "Library/Caches/org.swift.swiftpm", "Library/Caches/Yarn",
             ]).filter { item in
                 // Entries under Library/Caches are already listed under App Caches.
                 !(item.parent?.name == "Caches" && item.parent?.parent?.name == "Library")
-            })
+            } + dotCacheFolders()).sorted { $0.size > $1.size })
 
         add(.iosBackups, "iPhone and iPad Backups",
             "Local device backups. Delete only backups you no longer need.",
