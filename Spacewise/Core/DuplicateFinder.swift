@@ -17,11 +17,45 @@ struct DuplicateGroup: @unchecked Sendable {
     /// Content length of each file in the group.
     let fileSize: Int64
     var files: [FSNode]
+    /// APFS clone ID of each file whose data is shared with another file of
+    /// the group. Clones occupy the space of one copy, so removing all but one
+    /// of them frees nothing.
+    var cloneIDs: [ObjectIdentifier: UInt64] = [:]
+
+    init(fileSize: Int64, files: [FSNode], cloneIDs: [ObjectIdentifier: UInt64] = [:]) {
+        self.fileSize = fileSize
+        self.files = files
+        self.cloneIDs = cloneIDs
+    }
+
+    /// True when the file shares its data with another file of the group.
+    func sharesStorage(_ node: FSNode) -> Bool {
+        guard let id = cloneIDs[ObjectIdentifier(node)] else { return false }
+        return files.contains { $0 !== node && cloneIDs[ObjectIdentifier($0)] == id }
+    }
+
+    /// True when `a` and `b` are clones of the same data.
+    func areClones(_ a: FSNode, _ b: FSNode) -> Bool {
+        guard let id = cloneIDs[ObjectIdentifier(a)] else { return false }
+        return cloneIDs[ObjectIdentifier(b)] == id
+    }
+
+    /// One file per distinct copy on disk: clones of the same data count once.
+    var physicalCopies: [FSNode] {
+        var seen = Set<UInt64>()
+        return files.filter { file in
+            guard let id = cloneIDs[ObjectIdentifier(file)] else { return true }
+            return seen.insert(id).inserted
+        }
+    }
+
+    /// True when every file shares the same data, so there is nothing to free.
+    var isOnlyClones: Bool { files.count > 1 && physicalCopies.count < 2 }
 
     /// Space freed by keeping a single copy.
     var reclaimableBytes: Int64 {
-        guard files.count > 1 else { return 0 }
-        let sizes = files.map(\.size)
+        let sizes = physicalCopies.map(\.size)
+        guard sizes.count > 1 else { return 0 }
         return sizes.reduce(0, +) - (sizes.max() ?? 0)
     }
 }
@@ -158,9 +192,42 @@ final class DuplicateFinder: @unchecked Sendable {
 
         for index in groups.indices {
             groups[index].files.sort { $0.path < $1.path }
+            groups[index].cloneIDs = DuplicateFinder.sharedCloneIDs(of: groups[index].files)
         }
         groups.sort { $0.reclaimableBytes > $1.reclaimableBytes }
         return groups
+    }
+
+    // MARK: - APFS clones
+
+    /// Clone IDs of the files that share their data with another file of the list.
+    static func sharedCloneIDs(of files: [FSNode]) -> [ObjectIdentifier: UInt64] {
+        var ids: [ObjectIdentifier: UInt64] = [:]
+        var counts: [UInt64: Int] = [:]
+        for file in files {
+            guard let id = cloneID(atPath: file.path) else { continue }
+            ids[ObjectIdentifier(file)] = id
+            counts[id, default: 0] += 1
+        }
+        return ids.filter { counts[$0.value, default: 0] > 1 }
+    }
+
+    /// The APFS clone ID of a file. Files with the same clone ID are clones that
+    /// share all of their data. Nil when the file system does not report one.
+    static func cloneID(atPath path: String) -> UInt64? {
+        #if canImport(Darwin)
+        var request = attrlist()
+        request.bitmapcount = u_short(ATTR_BIT_MAP_COUNT)
+        request.forkattr = attrgroup_t(ATTR_CMNEXT_CLONEID)
+        var buffer = [UInt8](repeating: 0, count: 16)
+        let options = UInt32(FSOPT_ATTR_CMN_EXTENDED | FSOPT_NOFOLLOW)
+        guard getattrlist(path, &request, &buffer, buffer.count, options) == 0 else { return nil }
+        // Layout: u_int32_t length, then the u_int64_t clone ID.
+        let id = buffer.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 4, as: UInt64.self) }
+        return id == 0 ? nil : id
+        #else
+        return nil
+        #endif
     }
 
     // MARK: - Hashing

@@ -381,6 +381,43 @@ final class CoreTests: XCTestCase {
         root.teardown()
     }
 
+    #if canImport(Darwin)
+    func testDuplicateClonesAreNotCountedAsReclaimable() throws {
+        // a.bin and b.bin are APFS clones (shared data), c.bin is a real copy.
+        let original = try write("mixed/a.bin", bytes: 300_000, fill: 0x44)
+        try XCTSkipIf(clonefile(original.path, base.appendingPathComponent("mixed/b.bin").path, 0) != 0,
+                      "The temporary directory does not support clones")
+        try write("mixed/c.bin", bytes: 300_000, fill: 0x44)
+        // x.bin and y.bin are only clones of each other.
+        let lone = try write("clones/x.bin", bytes: 200_000, fill: 0x55)
+        XCTAssertEqual(clonefile(lone.path, base.appendingPathComponent("clones/y.bin").path, 0), 0)
+
+        let root = try scan()
+        let groups = DuplicateFinder().find(candidates: DuplicateFinder.candidates(root: root, minSize: 1_000))
+        XCTAssertEqual(groups.count, 2)
+
+        let mixed = try XCTUnwrap(groups.first { $0.fileSize == 300_000 })
+        XCTAssertEqual(mixed.files.map(\.name), ["a.bin", "b.bin", "c.bin"])
+        XCTAssertFalse(mixed.isOnlyClones)
+        XCTAssertEqual(mixed.physicalCopies.count, 2)
+        XCTAssertEqual(mixed.reclaimableBytes, mixed.files[2].size)
+        XCTAssertTrue(mixed.sharesStorage(mixed.files[0]))
+        XCTAssertTrue(mixed.sharesStorage(mixed.files[1]))
+        XCTAssertFalse(mixed.sharesStorage(mixed.files[2]))
+        XCTAssertTrue(mixed.areClones(mixed.files[0], mixed.files[1]))
+        XCTAssertFalse(mixed.areClones(mixed.files[0], mixed.files[2]))
+
+        let clones = try XCTUnwrap(groups.first { $0.fileSize == 200_000 })
+        XCTAssertTrue(clones.isOnlyClones)
+        XCTAssertEqual(clones.reclaimableBytes, 0)
+
+        // A real copy has its own clone ID.
+        XCTAssertNotEqual(DuplicateFinder.cloneID(atPath: base.appendingPathComponent("mixed/a.bin").path),
+                          DuplicateFinder.cloneID(atPath: base.appendingPathComponent("mixed/c.bin").path))
+        root.teardown()
+    }
+    #endif
+
     // MARK: Cleanup rules
 
     func testCleanupSuggestions() throws {

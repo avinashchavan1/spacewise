@@ -107,6 +107,9 @@ final class AppModel {
 
     var duplicateState: DuplicateState = .idle
     var duplicateGroups: [DuplicateGroup] = []
+    /// Sets of identical files that are all APFS clones of one another. They
+    /// already share their space, so they are left out of `duplicateGroups`.
+    var hiddenCloneGroupCount = 0
     var duplicateProgress = DuplicateFinder.Progress()
 
     var isDeleting = false
@@ -275,6 +278,7 @@ final class AppModel {
         collected = []
         collectedIDs = []
         duplicateGroups = []
+        hiddenCloneGroupCount = 0
         duplicateState = .idle
         isStale = false
         revision += 1
@@ -458,7 +462,7 @@ final class AppModel {
         for index in duplicateGroups.indices {
             duplicateGroups[index].files.removeAll { !$0.isInTree }
         }
-        duplicateGroups.removeAll { $0.files.count < 2 }
+        duplicateGroups.removeAll { $0.files.count < 2 || $0.isOnlyClones }
 
         let gone = collected.filter { !$0.isInTree }
         if !gone.isEmpty { uncollect(gone) }
@@ -496,6 +500,7 @@ final class AppModel {
         let finder = DuplicateFinder()
         duplicateFinder = finder
         duplicateGroups = []
+        hiddenCloneGroupCount = 0
         duplicateProgress = DuplicateFinder.Progress()
         duplicateState = .running
 
@@ -518,13 +523,15 @@ final class AppModel {
                 duplicateState = .idle
                 return
             }
-            duplicateGroups = groups
+            let current = groups
                 .map { group in
                     var kept = group
                     kept.files.removeAll { !$0.isInTree }
                     return kept
                 }
                 .filter { $0.files.count > 1 }
+            duplicateGroups = current.filter { !$0.isOnlyClones }
+            hiddenCloneGroupCount = current.count - duplicateGroups.count
             duplicateState = .finished
         }
     }
@@ -535,13 +542,15 @@ final class AppModel {
         if duplicateState == .running { duplicateState = .idle }
     }
 
-    /// Marks every copy except the first in each group for removal.
+    /// Marks every copy except the first in each group for removal. Clones of
+    /// the kept copy are left alone: they share its space, so removing them
+    /// would free nothing.
     func collectExtraDuplicates() {
         var extras: [FSNode] = []
         for group in duplicateGroups {
             let alreadyKept = group.files.first { !isCoveredByCollection($0) }
             guard let keep = alreadyKept else { continue }
-            extras.append(contentsOf: group.files.filter { $0 !== keep })
+            extras.append(contentsOf: group.files.filter { $0 !== keep && !group.areClones($0, keep) })
         }
         collect(extras)
     }

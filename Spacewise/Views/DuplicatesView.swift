@@ -46,6 +46,9 @@ struct DuplicatesView: View {
                     Label("No Duplicates", systemImage: "checkmark.circle")
                 } description: {
                     Text("No identical files of \(formatBytes(minimumBytes)) or more were found.")
+                    if model.hiddenCloneGroupCount > 0 {
+                        Text(cloneNote)
+                    }
                 } actions: {
                     Button("Search Again") { model.duplicateState = .idle }
                 }
@@ -57,6 +60,12 @@ struct DuplicatesView: View {
 
     private var minimumBytes: Int64 {
         minimumMB == 0 ? 100_000 : Int64(minimumMB) * 1_000_000
+    }
+
+    private var cloneNote: String {
+        let count = model.hiddenCloneGroupCount
+        let sets = count == 1 ? "1 set" : "\(formatCount(count)) sets"
+        return "\(sets) of identical files are not shown because the copies are clones that already share disk space. Removing them would free nothing."
     }
 
     private var results: some View {
@@ -72,6 +81,11 @@ struct DuplicatesView: View {
                     Text("Keeping one copy of each frees \(formatBytes(reclaimable)).")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                    if model.hiddenCloneGroupCount > 0 {
+                        Text(cloneNote)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Button("Search Again") { model.duplicateState = .idle }
@@ -87,7 +101,7 @@ struct DuplicatesView: View {
                 ForEach(shown, id: \.offset) { entry in
                     Section {
                         ForEach(entry.element.files) { node in
-                            DuplicateRow(node: node)
+                            DuplicateRow(node: node, sharesStorage: entry.element.sharesStorage(node))
                         }
                     } header: {
                         DuplicateHeader(group: entry.element)
@@ -131,12 +145,19 @@ private struct DuplicateHeader: View {
 private struct DuplicateRow: View {
     @Environment(AppModel.self) private var model
     let node: FSNode
+    var sharesStorage = false
 
     var body: some View {
         HStack(spacing: 8) {
             CollectToggle(model: model, node: node)
             FileNameCell(node: node, showsLocation: true)
             Spacer(minLength: 8)
+            if sharesStorage {
+                Label("Shares storage", systemImage: "link")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help("This copy is an APFS clone of another copy in this set. They use the disk space of one file, so removing only this one frees nothing.")
+            }
             Text(node.modifiedDate.formatted(date: .abbreviated, time: .omitted))
                 .font(.callout)
                 .foregroundStyle(.secondary)
